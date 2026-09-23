@@ -6,7 +6,11 @@ Contract cho AI coding agent làm việc trên repo này. Đọc file này như 
 
 `auto-check` — bộ **Playwright health-check cho TNMath V6 (prod)** ở `https://tnmath.edu.vn`, tập trung luồng học sinh. Ngoài V6, có thêm luồng đăng nhập V5 (`trangnguyen.edu.vn`) và luồng chuyển hệ V5 ↔ V6 ↔ VNMF (`vnmf.edu.vn`) — 3 hệ dùng chung 1 SSO realm (Keycloak, `id.trangnguyen.edu.vn`). Stack: TypeScript + `@playwright/test` (Chromium), báo cáo qua Discord webhook (1 summary/lần chạy). Chạy thật lên prod → cần `.env` + tài khoản học sinh.
 
-Đặc tả chi tiết từng case (nguồn canonical hiện tại): `docs/kịch bản kiểm tra hệ thống Trạng Nguyên_1.xlsx`, sheet **"Webuser các V - Test case"** (22 case, mã `HC-V5-xx` / `HC-V6-xx` / `HC-VNMF-xx`). `docs/SRS-kich-ban-auto-check-TNMath-V6.md` là tài liệu SRS phase 1 cũ (V6-only, TC-xx) — đã lỗi thời so với kiến trúc hiện tại, giữ lại để tham khảo lịch sử, KHÔNG dùng làm nguồn đặc tả case mới.
+Đặc tả chi tiết từng case (nguồn canonical hiện tại): `docs/kịch bản kiểm tra hệ thống Trạng Nguyên_1.xlsx`.
+- Sheet **"Webuser các V - Test case"** — 22 case học sinh, mã `HC-V5-xx` / `HC-V6-xx` / `HC-VNMF-xx`. Chạy bằng `npm test`.
+- Sheet **"Quản trị các V - Test case"** — CMS quản trị (đăng nhập → menu chính → đăng xuất). Suite **riêng** `npm run test:cms`, không trộn vào `npm test`. Đợt này chạy CMS2 + Quản trị; CMS5 / Nội bộ / Cms new / Admin vnmf skip vì chưa có tài khoản; CMS6 và MinIO chưa đưa vào.
+
+`docs/SRS-kich-ban-auto-check-TNMath-V6.md` là tài liệu SRS phase 1 cũ (V6-only, TC-xx) — đã lỗi thời so với kiến trúc hiện tại, giữ lại để tham khảo lịch sử, KHÔNG dùng làm nguồn đặc tả case mới.
 
 ## Cấu trúc (path thật)
 
@@ -24,7 +28,9 @@ Luồng chính chạy **đúng thứ tự sheet**: HC-V5-01..07 → HC-V6-01..09
 - `src/config.ts` — `.env` + URL helpers. Vòng thi V5 cố định: `V5_EXAM_PLAYGROUND` / `V5_EXAM_ROUND` (+ fallback).
 - `src/pages/` — Page Objects: `auth`, `result`, `v5-learning`, `v6-flow`, `arena`, `vnmf`, `system-switch` (`restoreV5SessionThenOpenV6`), `learning` (chỉ visual).
 - `src/timing.ts`, `src/discord.ts`, `src/reporters/discord-reporter.ts`, `scripts/run-checks.ps1`.
-- `playwright.config.ts` — `workers: 1`, `fullyParallel: false`, timeout 120s, `actionTimeout: 15_000` / `navigationTimeout: 30_000`; projects `visual-setup`/`visual` + `chromium`.
+- `tests/cms/` — suite CMS, project Playwright `cms` (`npm run test:cms`). Context mới mỗi hệ, không dùng `sharedPage`. `20-cms2` + `21-quantri` chạy thật; `29-cms-pending` skip đến khi có tài khoản.
+- `src/pages/cms-admin.ts` — login / menu chính / logout cho admin Midone (CMS2, Quản trị).
+- `playwright.config.ts` — `workers: 1`, `fullyParallel: false`, timeout 120s, `actionTimeout: 15_000` / `navigationTimeout: 30_000`; projects `visual-setup`/`visual` + `chromium` + `cms`. `npm test` chỉ project `chromium` (không gồm `cms`).
 
 **Tag**: `@smoke` (HC-V5-01), `@critical`, `@visual`, `@HC-V5`/`@HC-V6`/`@HC-VNMF`.
 
@@ -68,6 +74,7 @@ npm run test:visual                   # visual (ngoài npm test)
 npm run test:update-snapshots         # cập nhật baseline ảnh (UI đổi có chủ đích)
 npm run test:headed                   # xem trình duyệt
 npm run test:report                   # mở HTML report
+npm run test:cms                      # CMS quản trị (project cms; tách khỏi npm test)
 ```
 
 ## Lệnh verify
@@ -80,6 +87,7 @@ npm run test:report                   # mở HTML report
 | `src/config.ts` / thêm env | `npx tsc --noEmit` | `npm test` |
 | `src/discord.ts`, `src/reporters/**` | `npx tsc --noEmit` | `npm test` |
 | `tests/08-visual.spec.ts` / UI đổi | `npx tsc --noEmit` | `npm run test:visual` |
+| Suite CMS (`tests/cms/**`, `src/pages/cms-admin.ts`) | `npx tsc --noEmit` | `npm run test:cms` |
 
 - **Verify chính: `npm test`**.
 - Thiếu `.env`/mạng/tài khoản → lỗi môi trường, không tính vào 8 vòng; coi `npm test` là "n/a", dựa `tsc --noEmit`.

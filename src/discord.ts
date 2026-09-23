@@ -17,6 +17,7 @@ export async function notifyDiscord(opts: {
   level: DiscordLevel;
   details?: string;
   fields?: DiscordField[];
+  footer?: string;
 }): Promise<void> {
   if (!env.discordWebhook) return;
 
@@ -40,7 +41,7 @@ export async function notifyDiscord(opts: {
         color,
         fields: fields.length ? fields : undefined,
         timestamp: new Date().toISOString(),
-        footer: { text: 'TNMath auto-check · V6 prod' },
+        footer: { text: opts.footer || 'Auto Check Web Học Thi' },
       },
     ],
   };

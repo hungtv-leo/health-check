@@ -3,9 +3,11 @@
     Runner cho bo auto-check TNMath V6 - dung cho chay theo lich (Windows Task Scheduler).
 
 .DESCRIPTION
-    Chay `npm test` (full Playwright suite). Ket qua tong ket duoc gui len Discord
-    boi reporter trong repo. Script nay chi lo: ve dung thu muc repo, chay suite,
-    ghi log co timestamp, va tra exit code phan anh dung ket qua test.
+    Chay lan luot hai suite trong cung mot lan goi:
+    - npm test          → Auto Check Web Học Thi
+    - npm run test:cms  → Auto Check Web Quản Trị
+    Moi suite gui 1 summary Discord. Script nay chi lo: ve dung thu muc repo,
+    chay ca hai suite, ghi log co timestamp, va tra exit code (loi neu mot suite do).
 
     Ghi chu 1: KHONG dat $ErrorActionPreference='Stop' - npm/playwright ghi tien trinh
     ra stderr, neu Stop se coi la loi terminating va thoat som (false-fail).
@@ -39,21 +41,32 @@ $LogFile = Join-Path $LogDir "run-$Stamp.log"
 "[{0}] START auto-check tai {1}" -f (Get-Date -Format o), $RepoRoot |
     Tee-Object -FilePath $LogFile
 
-# Chay full suite; gop stdout+stderr vao log VA giu lai output de suy ra ket qua.
-$output  = & npm test 2>&1 | Tee-Object -FilePath $LogFile -Append
-$npmExit = $LASTEXITCODE
-$joined  = ($output | Out-String)
-
-# Suy ra ket qua tu summary cua Playwright (doc lap voi crash teardown cua node).
-if ($joined -match '(?m)^\s*\d+\s+(failed|interrupted|timedOut)') {
-    $ExitCode = 1                       # co case fail/interrupt
-} elseif ($joined -match '(?m)^\s*\d+\s+passed') {
-    $ExitCode = 0                       # tat ca pass (bo qua crash luc node thoat)
-} else {
-    $ExitCode = 1                       # khong thay summary -> run khong hoan tat
+# Suy ra ket qua tu summary Playwright (doc lap voi crash teardown cua node).
+function Get-PlaywrightExit([string]$Joined, [int]$NpmExit) {
+    if ($Joined -match '(?m)^\s*\d+\s+(failed|interrupted|timedOut)') { return 1 }
+    if ($Joined -match '(?m)^\s*\d+\s+passed') { return 0 }
+    if ($NpmExit -ne 0) { return 1 }
+    return 1
 }
 
-"[{0}] END. playwright-derived exit = {1} (npm raw exit = {2})" -f (Get-Date -Format o), $ExitCode, $npmExit |
+function Invoke-CheckSuite([string]$Label, [string]$NpmScript) {
+    "[{0}] START {1} ({2})" -f (Get-Date -Format o), $Label, $NpmScript |
+        Tee-Object -FilePath $LogFile -Append | Out-Null
+    $output = & npm run $NpmScript 2>&1 | Tee-Object -FilePath $LogFile -Append
+    $npmExit = $LASTEXITCODE
+    $code = Get-PlaywrightExit ($output | Out-String) $npmExit
+    "[{0}] END {1}. playwright-derived exit = {2} (npm raw exit = {3})" -f (Get-Date -Format o), $Label, $code, $npmExit |
+        Tee-Object -FilePath $LogFile -Append | Out-Null
+    return $code
+}
+
+# Hoc Thi truoc, Quan Tri sau. Suite truoc do van chay suite sau de ca hai deu co bao cao.
+$codeHocThi  = Invoke-CheckSuite "Web Học Thi" "test"
+$codeQuanTri = Invoke-CheckSuite "Web Quản Trị" "test:cms"
+$ExitCode = 0
+if ($codeHocThi -ne 0 -or $codeQuanTri -ne 0) { $ExitCode = 1 }
+
+"[{0}] END. combined exit = {1} (hoc-thi = {2}, quan-tri = {3})" -f (Get-Date -Format o), $ExitCode, $codeHocThi, $codeQuanTri |
     Tee-Object -FilePath $LogFile -Append
 
 # Don log cu hon 30 ngay

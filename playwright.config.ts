@@ -51,12 +51,17 @@ export default defineConfig({
     },
     {
       name: 'chromium',
-      testIgnore: [/08-visual\.setup\.ts/, /08-visual\.spec\.ts/],
+      testIgnore: [/08-visual\.setup\.ts/, /08-visual\.spec\.ts/, /[\\/]cms[\\/]/],
       use: {
         ...devices['Desktop Chrome'],
         // Headless trên GitHub chặn play() nếu không có thao tác người dùng, currentTime kẹt ở 0.
         launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
       },
+    },
+    {
+      name: 'cms',
+      testMatch: /[\\/]cms[\\/].*\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
     },
   ],
 });

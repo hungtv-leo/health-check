@@ -11,7 +11,8 @@
     "test:critical": "playwright test --project=chromium --grep @critical",
     "test:visual": "playwright test --project=visual tests/08-visual.spec.ts",
     "test:update-snapshots": "playwright test --project=visual tests/08-visual.spec.ts --update-snapshots",
-    "test:report": "playwright show-report"
+    "test:report": "playwright show-report",
+    "test:cms": "playwright test --project=cms"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

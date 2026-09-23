@@ -15,7 +15,7 @@ type CaseRecord = {
   notes: string[];
 };
 
-const PROJECT_NAMES = ['chromium', 'visual', 'visual-setup'];
+const PROJECT_NAMES = ['chromium', 'visual', 'visual-setup', 'cms'];
 
 function shortTitle(test: TestCase): string {
   // e.g. "chromium › 10-flow-v5.spec.ts › Luồng liên tục · A. WEB V5 › HC-V5-01..."
@@ -56,10 +56,18 @@ function chunkLines(lines: string[], maxLen = 1000): string[] {
   return chunks;
 }
 
+function isQuanTri(test: TestCase): boolean {
+  const project = test.parent?.project?.()?.name?.toLowerCase() || '';
+  if (project === 'cms') return true;
+  return /[\\/]cms[\\/]/.test(test.location?.file || '');
+}
+
 class DiscordReporter implements Reporter {
   private cases: CaseRecord[] = [];
+  private quanTri = false;
 
   onTestEnd(test: TestCase, result: TestResult) {
+    if (isQuanTri(test)) this.quanTri = true;
     const title = shortTitle(test);
     const notes: string[] = [];
 
@@ -103,18 +111,21 @@ class DiscordReporter implements Reporter {
     const level: DiscordLevel =
       failed.length > 0 ? 'FAIL' : warnings.length > 0 ? 'WARNING' : 'INFO';
 
+    const suite = this.quanTri ? 'Auto Check Web Quản Trị' : 'Auto Check Web Học Thi';
     const headline =
       level === 'FAIL'
-        ? 'TNMath auto-check · CÓ LỖI'
+        ? `${suite} · CÓ LỖI`
         : level === 'WARNING'
-          ? 'TNMath auto-check · CÓ WARNING'
-          : 'TNMath auto-check · PASS';
+          ? `${suite} · CÓ WARNING`
+          : `${suite} · PASS`;
 
     const summary = [
       `**Tổng kết:** ${result.status.toUpperCase()}`,
       `PASS: **${passed.length}** · WARNING: **${warnings.length}** · FAIL: **${failed.length}** · SKIP: **${skipped.length}** · Tổng: **${this.cases.length}**`,
       '',
-      '_Ngưỡng thời gian: Pass ≤ 4s · Warning ≤ 6s · Fail > 6s_',
+      this.quanTri
+        ? '_Ngưỡng thời gian chỉ cho đăng nhập và đăng xuất: Pass ≤ 4s · Warning ≤ 6s · Fail > 6s. Menu chính không tính giờ._'
+        : '_Ngưỡng thời gian: Pass ≤ 4s · Warning ≤ 6s · Fail > 6s_',
     ].join('\n');
 
     const fields: DiscordField[] = [];
@@ -151,6 +162,7 @@ class DiscordReporter implements Reporter {
       level,
       details: summary,
       fields,
+      footer: suite,
     });
   }
 }

@@ -31,6 +31,13 @@ export const env = {
   v5ExamFallbackRound: process.env.V5_EXAM_FALLBACK_ROUND || 'Vòng 1',
   passMaxMs: Number(process.env.PASS_MAX_MS || 4000),
   warningMaxMs: Number(process.env.WARNING_MAX_MS || 6000),
+  /** Suite CMS (`npm run test:cms`) — không bắt buộc với `npm test`. */
+  cms2BaseUrl: process.env.CMS2_BASE_URL || 'https://cms2.trangnguyen.edu.vn',
+  cms2User: process.env.CMS2_USER || '',
+  cms2Pass: process.env.CMS2_PASS || '',
+  qtBaseUrl: process.env.QT_BASE_URL || 'https://quantri.trangnguyen.edu.vn',
+  qtUser: process.env.QT_USER || '',
+  qtPass: process.env.QT_PASS || '',
 };
 
 export function lessonUrl(): string {
