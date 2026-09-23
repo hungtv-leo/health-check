@@ -1,6 +1,6 @@
 # Health-check TNMath.
 # Lịch cron dùng UTC (Việt Nam = UTC+7):
-#   30 0 * * *  → 07:30 ICT
+#   30 1 * * *  → 08:30 ICT
 #   30 9 * * *  → 16:30 ICT
 # Chạy trên runner self-hosted ở Việt Nam. Máy ubuntu-latest của GitHub ở nước ngoài,
 # đường đi tới prod làm t_login vượt 6s dù site vẫn đăng nhập được.
@@ -11,7 +11,7 @@ name: Health check
 
 on:
   schedule:
-    - cron: '30 0 * * *'
+    - cron: '30 1 * * *'
     - cron: '30 9 * * *'
   workflow_dispatch:
 
