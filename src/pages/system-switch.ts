@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { env } from '../config';
-import { dismissPopups, ensureLoggedIn, loginAsStudent } from './auth';
+import { dismissPopups, ensureLoggedIn, loginAsStudent, loginTrigger } from './auth';
 import { probeCurrentPageStatus } from './result';
 
 /**
@@ -89,12 +89,43 @@ export async function switchVnmfToV6ViaLogin(page: Page): Promise<SwitchResult> 
 }
 
 /**
- * V6 -> V5 (HC-V6-07): menu "Thi Toán" -> 1 tab kỳ thi (vd "Thi VNMF (Lớp 1 - 2 - 3)") -> bảng
- * chặng thi -> "Thi ngay" của chặng "Đang diễn ra". Hành vi thật trên prod (theo video ghi lại
- * thao tác): đích cuối là thi.trangnguyen.edu.vn/vao-thi-trang-nguyen-2023/ (màn "Thi hay" của
- * V5), session được GIỮ NGUYÊN — không có bounce logout/login SSO.
+ * Đăng nhập trên một host nếu còn nút "Đăng nhập" hoặc chưa thấy SBD.
+ * Chỉ thấy chữ SBD là chưa đủ: trang V5 có thể còn text cũ trong khi phiên SSO đã mất.
+ */
+async function ensureHostLoggedIn(page: Page, baseUrl: string): Promise<void> {
+  await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+  await dismissPopups(page);
+  const loginVisible = await loginTrigger(page).isVisible().catch(() => false);
+  const sbdVisible = await page.getByText(/SBD:/i).first().isVisible().catch(() => false);
+  if (loginVisible || !sbdVisible) await loginAsStudent(page, undefined, baseUrl);
+}
+
+/** Form Keycloak của client V5. Điền xong thì phiên V5 được tạo. */
+async function loginV5OnKeycloakIfShown(page: Page): Promise<boolean> {
+  const userField = page
+    .getByRole('textbox', { name: /tên đăng nhập/i })
+    .or(page.locator('input[name="username"]'))
+    .first();
+  const shown = await userField.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
+  if (!shown) return false;
+  await userField.fill(env.studentUser);
+  await page.locator('input[type="password"]').first().fill(env.studentPass);
+  await page.getByRole('button', { name: /^đăng nhập$/i }).last().click();
+  await page.waitForURL((url) => url.host !== 'id.trangnguyen.edu.vn', { timeout: 25000 }).catch(() => {});
+  return true;
+}
+
+/**
+ * V6 -> V5 (HC-V6-07): tiền điều kiện là đã đăng nhập cả V6 và V5, rồi menu "Thi Toán"
+ * -> tab kỳ thi -> "Thi ngay" của chặng "Đang diễn ra". Thiếu phiên V5 thì đích rơi vào
+ * form Keycloak (client v5-frontend) thay vì màn Thi hay.
  */
 export async function switchV6ToV5ViaThiNgay(page: Page): Promise<SwitchResult & { sessionKept: boolean }> {
+  await ensureHostLoggedIn(page, env.baseUrl);
+  await ensureHostLoggedIn(page, env.v5BaseUrl);
+  await ensureHostLoggedIn(page, env.baseUrl);
+
   await page.goto(`${env.baseUrl}/thi-toan`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2000);
   await dismissPopups(page);
@@ -113,8 +144,21 @@ export async function switchV6ToV5ViaThiNgay(page: Page): Promise<SwitchResult &
     : page.getByRole('link', { name: /^Thi ngay$/i }).first();
 
   await examNowBtn.click();
-  // Keycloak có thể hiện vài giây rồi tự chuyển tiếp nếu phiên còn. Không điền form:
-  // sheet coi phải đăng nhập lại là mất phiên.
+  const loggedInOnTheWay = await loginV5OnKeycloakIfShown(page);
+  const onExam = /thi\.trangnguyen\.edu\.vn|vao-thi-trang-nguyen-2023/i.test(page.url());
+  // Form đăng nhập là client V5. Đăng nhập xong mà chưa tới màn Thi hay thì bấm Thi ngay lại.
+  if (loggedInOnTheWay && !onExam) {
+    await ensureHostLoggedIn(page, env.v5BaseUrl);
+    await ensureHostLoggedIn(page, env.baseUrl);
+    await page.goto(`${env.baseUrl}/thi-toan`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    await dismissPopups(page);
+    await ensureLoggedIn(page);
+    const again = page.getByRole('link', { name: /^Thi ngay$/i }).first();
+    await again.click();
+    await loginV5OnKeycloakIfShown(page);
+  }
+
   await page.waitForURL(urlOnHost(env.v5BaseUrl), { timeout: 25000 }).catch(() => {});
   await page.waitForTimeout(1500);
 

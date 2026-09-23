@@ -113,13 +113,8 @@ test.describe('Luồng liên tục · B. WEB V6', { tag: ['@critical', '@HC-V6']
 
   test('HC-V6-07 · Chuyển hệ V6 → V5 (Thi ngay)', async ({ sharedPage: page }, testInfo) => {
     const { host, path, status, sessionKept } = await switchV6ToV5ViaThiNgay(page);
-    const v5Host = new URL(env.v5BaseUrl).host;
-    const hostOk =
-      host === 'thi.trangnguyen.edu.vn' ||
-      host === v5Host ||
-      (host.endsWith(`.${v5Host}`) && host !== 'id.trangnguyen.edu.vn');
-    const pathOk = /vao-thi-trang-nguyen-2023/i.test(path) || hostOk;
-    const verdict: Verdict = hostOk && status === 200 && sessionKept && pathOk ? 'PASS' : 'FAIL';
+    const onThiHay = host === 'thi.trangnguyen.edu.vn' || /vao-thi-trang-nguyen-2023/i.test(path);
+    const verdict: Verdict = onThiHay && status === 200 && sessionKept ? 'PASS' : 'FAIL';
     await attachResult(testInfo, verdict, {
       host_dich: host,
       duong_dan: path,
