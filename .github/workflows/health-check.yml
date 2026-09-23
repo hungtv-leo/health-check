@@ -1,8 +1,9 @@
-# Health-check TNMath trên GitHub Actions.
+# Health-check TNMath.
 # Lịch cron dùng UTC (Việt Nam = UTC+7):
 #   30 0 * * *  → 07:30 ICT
 #   30 9 * * *  → 16:30 ICT
-# GitHub có thể trễ vài phút. Workflow phải nằm trên nhánh mặc định thì lịch mới chạy.
+# Chạy trên runner self-hosted ở Việt Nam. Máy ubuntu-latest của GitHub ở nước ngoài,
+# đường đi tới prod làm t_login vượt 6s dù site vẫn đăng nhập được.
 # Secrets (Settings → Secrets and variables → Actions), không commit .env:
 #   STUDENT_USER, STUDENT_PASS, DISCORD_WEBHOOK_URL
 
@@ -20,7 +21,7 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 60
     env:
       STUDENT_USER: ${{ secrets.STUDENT_USER }}
@@ -38,12 +39,12 @@ jobs:
         run: npm ci
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       # .env.example có URL và content ID. dotenv không ghi đè biến đã có,
       # nên 3 secret ở trên vẫn thắng các dòng trống trong file mẫu.
       - name: Prepare env file
-        run: cp .env.example .env
+        run: node -e "require('fs').copyFileSync('.env.example','.env')"
 
       - name: Run health check
         run: npm test
