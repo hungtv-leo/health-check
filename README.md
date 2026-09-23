@@ -26,4 +26,4 @@ npm run test:headed       # xem trình duyệt (Học Thi)
 npm run test:report       # mở HTML report
 ```
 
-Task `TNMath-auto-check` chạy cả hai suite mỗi ngày lúc 16:30 qua `scripts/run-checks.ps1`.
+Task `Auto-check` chạy cả hai suite mỗi ngày lúc 16:30 qua `scripts/run-checks.ps1`.
