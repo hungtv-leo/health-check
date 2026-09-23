@@ -3,13 +3,16 @@ import { env } from '../config';
 import { dismissPopups, ensureLoggedIn, loginAsStudent } from './auth';
 import { probeCurrentPageStatus } from './result';
 
-/** Escape 1 chuỗi URL để dùng an toàn trong RegExp (dấu chấm, gạch chéo…). */
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function hostRegex(baseUrl: string): RegExp {
-  return new RegExp(escapeRegex(new URL(baseUrl).host));
+/**
+ * Đúng host đích. Không dùng regex chuỗi con: `trangnguyen.edu.vn` cũng khớp
+ * `id.trangnguyen.edu.vn` (trang đăng nhập Keycloak), nên waitForURL dừng sớm.
+ */
+function urlOnHost(baseUrl: string): (url: URL) => boolean {
+  const expected = new URL(baseUrl).host;
+  return (url: URL) => {
+    if (url.host === 'id.trangnguyen.edu.vn') return false;
+    return url.host === expected || url.host.endsWith(`.${expected}`);
+  };
 }
 
 export type SwitchResult = { host: string; path: string; status: number };
@@ -25,7 +28,7 @@ export async function switchV5ToV6(page: Page): Promise<SwitchResult> {
   await page.waitForTimeout(1500);
   await dismissPopups(page);
   await page.getByRole('link', { name: /^VNMF$/i }).first().click();
-  await page.waitForURL(hostRegex(env.baseUrl), { timeout: 20000 });
+  await page.waitForURL(urlOnHost(env.baseUrl), { timeout: 20000 });
   await page.waitForTimeout(1000);
   return toSwitchResult(page, await probeCurrentPageStatus(page));
 }
@@ -45,7 +48,7 @@ export async function switchV6ToVnmf(page: Page): Promise<SwitchResult> {
   await page.waitForTimeout(1500);
   await dismissPopups(page);
   await page.getByRole('link', { name: /^VNMF$/i }).first().click();
-  await page.waitForURL(hostRegex(env.vnmfBaseUrl), { timeout: 20000 });
+  await page.waitForURL(urlOnHost(env.vnmfBaseUrl), { timeout: 20000 });
   await page.waitForTimeout(1000);
   return toSwitchResult(page, await probeCurrentPageStatus(page));
 }
@@ -80,7 +83,7 @@ export async function switchVnmfToV6ViaLogin(page: Page): Promise<SwitchResult> 
   await dismissPopups(page);
   await page.getByRole('button', { name: /^Đăng nhập$/i }).first().click();
   await fillKeycloakFormIfShown(page);
-  await page.waitForURL(hostRegex(env.baseUrl), { timeout: 20000 });
+  await page.waitForURL(urlOnHost(env.baseUrl), { timeout: 20000 });
   await expect(page.getByText(/SBD:/i).first()).toBeVisible({ timeout: 15000 });
   return toSwitchResult(page, await probeCurrentPageStatus(page));
 }
@@ -110,8 +113,9 @@ export async function switchV6ToV5ViaThiNgay(page: Page): Promise<SwitchResult &
     : page.getByRole('link', { name: /^Thi ngay$/i }).first();
 
   await examNowBtn.click();
-  await fillKeycloakFormIfShown(page, 5000);
-  await page.waitForURL(hostRegex(env.v5BaseUrl), { timeout: 25000 });
+  // Keycloak có thể hiện vài giây rồi tự chuyển tiếp nếu phiên còn. Không điền form:
+  // sheet coi phải đăng nhập lại là mất phiên.
+  await page.waitForURL(urlOnHost(env.v5BaseUrl), { timeout: 25000 }).catch(() => {});
   await page.waitForTimeout(1500);
 
   const sessionKept = await page.getByText(/SBD:/i).first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true).catch(() => false);

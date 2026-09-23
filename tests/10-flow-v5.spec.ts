@@ -69,7 +69,7 @@ test.describe('Luồng liên tục · A. WEB V5', { tag: ['@critical', '@HC-V5']
     const verdict: Verdict = currentTime > 0 ? 'PASS' : 'FAIL';
     await attachResult(testInfo, verdict, {
       ten_bai_giang: lessonTitle || 'N/A',
-      currentTime: currentTime.toFixed(1),
+      currentTime: currentTime.toFixed(2),
     });
   });
 

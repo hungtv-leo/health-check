@@ -263,7 +263,7 @@ async function openV5LessonBubble(page: Page): Promise<boolean> {
   return false;
 }
 
-/** HC-V5-04 · Học giỏi: ô lục giác → icon sách (video) → play, đọc currentTime sau ~3s. */
+/** HC-V5-04 · Học giỏi: ô lục giác → icon sách (video) → play, chờ currentTime > 0. */
 export async function openV5AnyLessonAndPlayVideo(page: Page): Promise<{ currentTime: number; lessonTitle: string }> {
   const courseTitle = await openV5HocGioiMap(page);
   const opened = await openV5LessonBubble(page);
@@ -274,22 +274,42 @@ export async function openV5AnyLessonAndPlayVideo(page: Page): Promise<{ current
 
   // Icon trái trong bong bóng = sách / video.
   await lessonBubbleButtons(page).first().click({ force: true }).catch(() => {});
-  await page.waitForTimeout(2000);
 
-  const video = await locateVideo(page);
-  if ((await video.count().catch(() => 0)) === 0) return { currentTime: 0, lessonTitle };
+  const video = await waitForLessonVideo(page);
+  if (!video) return { currentTime: 0, lessonTitle };
 
   const playBtn = page.getByRole('button', { name: /play|phát/i }).first();
   if (await playBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
     await playBtn.click().catch(() => {});
   }
-  await video.evaluate(async (el: HTMLVideoElement) => {
+  await video.evaluate((el: HTMLVideoElement) => {
     el.muted = true;
-    await el.play().catch(() => {});
+    const tryPlay = () => {
+      void el.play().catch(() => {});
+    };
+    el.addEventListener('loadeddata', tryPlay);
+    tryPlay();
   });
-  await page.waitForTimeout(3000);
-  const currentTime = await video.evaluate((el: HTMLVideoElement) => el.currentTime);
+
+  // Máy GitHub tải video từ VN chậm hơn máy local: chờ currentTime nhích, không chốt sau 3s.
+  const deadline = Date.now() + 20_000;
+  let currentTime = 0;
+  while (Date.now() < deadline) {
+    currentTime = await video.evaluate((el: HTMLVideoElement) => el.currentTime).catch(() => 0);
+    if (currentTime > 0) break;
+    await page.waitForTimeout(500);
+  }
   return { currentTime, lessonTitle };
+}
+
+async function waitForLessonVideo(page: Page): Promise<Locator | null> {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const video = await locateVideo(page);
+    if ((await video.count().catch(() => 0)) > 0) return video;
+    await page.waitForTimeout(500);
+  }
+  return null;
 }
 
 /**
