@@ -23,6 +23,11 @@ jobs:
   check:
     runs-on: self-hosted
     timeout-minutes: 60
+    # Dịch vụ Windows chạy bằng NETWORK SERVICE, ExecutionPolicy chặn npm.ps1.
+    # cmd gọi npm.cmd nên không vướng policy đó.
+    defaults:
+      run:
+        shell: cmd
     env:
       STUDENT_USER: ${{ secrets.STUDENT_USER }}
       STUDENT_PASS: ${{ secrets.STUDENT_PASS }}
