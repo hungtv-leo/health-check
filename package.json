@@ -1,0 +1,22 @@
+{
+  "name": "auto-check",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TNMath V6 automated health checks (Playwright)",
+  "scripts": {
+    "test": "playwright test --project=chromium",
+    "test:headed": "playwright test --project=chromium --headed",
+    "test:flow": "playwright test --project=chromium tests/10-flow-v5.spec.ts tests/11-flow-v5-logout.spec.ts tests/12-flow-v6.spec.ts tests/13-flow-v6-logout.spec.ts tests/14-flow-vnmf.spec.ts",
+    "test:smoke": "playwright test --project=chromium --grep @smoke",
+    "test:critical": "playwright test --project=chromium --grep @critical",
+    "test:visual": "playwright test --project=visual tests/08-visual.spec.ts",
+    "test:update-snapshots": "playwright test --project=visual tests/08-visual.spec.ts --update-snapshots",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^22.20.4",
+    "dotenv": "^16.4.7",
+    "typescript": "^5.9.3"
+  }
+}

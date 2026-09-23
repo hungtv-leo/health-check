@@ -1,0 +1,19 @@
+---
+description: Luôn chạy verify thật trước khi báo hoàn thành; sửa đến khi PASS.
+alwaysApply: true
+---
+
+# Verify-until-done
+
+Khi được giao task coding trong repo này:
+
+1. Đọc `AGENTS.md` (root) để lấy **Lệnh verify** theo path đã đụng.
+2. Sửa tối thiểu → chạy verify thật bằng Shell → FAIL thì sửa lại → lặp (tối đa 8 vòng).
+3. KHÔNG báo "xong" khi verify còn đỏ. KHÔNG đoán kết quả test.
+
+Verify:
+- Mỗi vòng (nhanh): `npx tsc --noEmit`
+- Trước khi báo Done (đầy đủ): `npm test` (full suite, chạm prod, cần `.env`).
+- Thiếu `.env`/mạng/tài khoản → lỗi môi trường: KHÔNG tính vào 8 vòng, báo user 1 dòng, coi `npm test` là "n/a", dựa vào `tsc --noEmit`.
+
+Hard stop (ưu tiên hơn mọi thứ): không commit `.env`/secret, không force-push, không `--no-verify` trừ khi user yêu cầu.

@@ -1,0 +1,16 @@
+import { test as setup, expect } from '@playwright/test';
+import fs from 'fs';
+import path from 'path';
+import { loginAsStudent } from '../src/pages/auth';
+
+export const AUTH_STATE_PATH = path.join('playwright', '.auth', 'user.json');
+
+setup('Login (1 lần) và lưu session', { tag: ['@smoke', '@critical', '@visual'] }, async ({ page }, testInfo) => {
+  fs.mkdirSync(path.dirname(AUTH_STATE_PATH), { recursive: true });
+
+  const elapsed = await loginAsStudent(page, testInfo);
+  await expect(page.getByText(/SBD:/i).first()).toBeVisible();
+  expect(elapsed).toBeGreaterThan(0);
+
+  await page.context().storageState({ path: AUTH_STATE_PATH });
+});

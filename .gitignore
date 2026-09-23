@@ -1,0 +1,13 @@
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+.tmp/
+tmp-probe/
+.env
+*.log
+playwright/.auth/
+storage-state.json
+

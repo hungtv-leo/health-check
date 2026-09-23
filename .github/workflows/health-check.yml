@@ -1,0 +1,59 @@
+# Health-check TNMath trên GitHub Actions.
+# Lịch cron dùng UTC (Việt Nam = UTC+7):
+#   30 0 * * *  → 07:30 ICT
+#   30 9 * * *  → 16:30 ICT
+# GitHub có thể trễ vài phút. Workflow phải nằm trên nhánh mặc định thì lịch mới chạy.
+# Secrets (Settings → Secrets and variables → Actions), không commit .env:
+#   STUDENT_USER, STUDENT_PASS, DISCORD_WEBHOOK_URL
+
+name: Health check
+
+on:
+  schedule:
+    - cron: '30 0 * * *'
+    - cron: '30 9 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: health-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      STUDENT_USER: ${{ secrets.STUDENT_USER }}
+      STUDENT_PASS: ${{ secrets.STUDENT_PASS }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # .env.example có URL và content ID. dotenv không ghi đè biến đã có,
+      # nên 3 secret ở trên vẫn thắng các dòng trống trong file mẫu.
+      - name: Prepare env file
+        run: cp .env.example .env
+
+      - name: Run health check
+        run: npm test
+
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
