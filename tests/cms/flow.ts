@@ -1,21 +1,43 @@
 import type { BrowserContext, Page } from '@playwright/test';
 import { test } from '@playwright/test';
 import { env } from '../../src/config';
+import { isAuthScreen } from '../../src/pages/cms-apps';
 import {
   checkMainMenus,
   loginCms,
   loginVerdict,
   logoutCms,
   type CmsAccount,
+  type LoginResult,
+  type MenuCheck,
 } from '../../src/pages/cms-admin';
 import { attachResult, type Verdict } from '../../src/pages/result';
 import { classifyTiming, formatMs } from '../../src/timing';
+
+export type CmsOps = {
+  login: (page: Page, account: CmsAccount) => Promise<LoginResult>;
+  checkMenus: (page: Page, baseUrl: string) => Promise<MenuCheck[]>;
+  logout: (page: Page, account: CmsAccount) => Promise<number>;
+};
+
+const midoneOps: CmsOps = {
+  login: loginCms,
+  checkMenus: checkMainMenus,
+  logout: (page) => logoutCms(page),
+};
 
 /**
  * Một hệ CMS = 1 context mới (ẩn danh), 3 case nối tiếp.
  * Không dùng sharedPage của luồng học sinh.
  */
-export function cmsFlow(id: string, system: string, account: () => CmsAccount, ready: () => boolean) {
+export function cmsFlow(
+  id: string,
+  system: string,
+  account: () => CmsAccount,
+  ready: () => boolean,
+  ops: CmsOps = midoneOps,
+  menuTimeout = 180_000,
+) {
   let context: BrowserContext;
   let page: Page;
 
@@ -32,8 +54,8 @@ export function cmsFlow(id: string, system: string, account: () => CmsAccount, r
     });
 
     test.afterAll(async () => {
-      if (page && !page.isClosed() && !page.url().includes('/login')) {
-        await logoutCms(page).catch(() => undefined);
+      if (page && !page.isClosed() && page.url() !== 'about:blank' && !isAuthScreen(page.url())) {
+        await ops.logout(page, account()).catch(() => undefined);
       }
       await context?.close();
     });
@@ -48,19 +70,20 @@ export function cmsFlow(id: string, system: string, account: () => CmsAccount, r
 
     test(`${id}-01 · Đăng nhập`, async ({}, testInfo) => {
       test.skip(!ready(), 'Thiếu tài khoản trong .env');
-      const result = await loginCms(page, account());
+      const result = await ops.login(page, account());
       const verdict = loginVerdict(result.reached, result.elapsed, result.reloaded);
       await attachResult(testInfo, verdict, {
         t_login: formatMs(result.elapsed),
         man_hinh_dich: result.reached ? 'màn hình chính' : 'không vào được',
         ...(result.reloaded ? { tai_lai: 'có' } : {}),
+        ...(result.note ? { loi: result.note } : {}),
       });
     });
 
     test(`${id}-02 · Kiểm tra TẤT CẢ menu chính`, async ({}, testInfo) => {
       test.skip(!ready(), 'Thiếu tài khoản trong .env');
-      test.setTimeout(180_000);
-      const checks = await checkMainMenus(page, account().baseUrl);
+      test.setTimeout(menuTimeout);
+      const checks = await ops.checkMenus(page, account().baseUrl);
       const passed = checks.filter((item) => item.ok).length;
       const failed = checks
         .filter((item) => !item.ok)
@@ -78,7 +101,7 @@ export function cmsFlow(id: string, system: string, account: () => CmsAccount, r
       let elapsed = 0;
       let error = '';
       try {
-        elapsed = await logoutCms(page);
+        elapsed = await ops.logout(page, account());
       } catch (err) {
         error = err instanceof Error ? err.message.split('\n')[0].slice(0, 180) : String(err);
       }

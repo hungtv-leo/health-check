@@ -5,7 +5,7 @@ Health-check Playwright trên prod. Hai suite tách nhau, mỗi suite một báo
 | Suite | Lệnh | Nội dung |
 | --- | --- | --- |
 | Auto Check Web Học Thi | `npm test` | V5, V6, VNMF |
-| Auto Check Web Quản Trị | `npm run test:cms` | CMS2 và Quản trị. Hệ chưa có tài khoản thì skip |
+| Auto Check Web Quản Trị | `npm run test:cms` | CMS2, CMS5, CMS6, Quản trị, Nội bộ, Cms new, Admin vnmf. Thiếu tài khoản trong `.env` thì skip |
 
 ## Setup
 

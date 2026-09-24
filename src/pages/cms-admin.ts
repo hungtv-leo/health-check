@@ -52,11 +52,15 @@ async function fillLoginForm(page: Page, account: CmsAccount): Promise<void> {
   throw new Error('Form đăng nhập không nhận tài khoản');
 }
 
+export type LoginResult = {
+  elapsed: number;
+  reached: boolean;
+  reloaded: boolean;
+  note?: string;
+};
+
 /** Đăng nhập CMS. Đồng hồ bắt đầu lúc bấm nút, dừng khi rời màn hình đăng nhập. */
-export async function loginCms(
-  page: Page,
-  account: CmsAccount,
-): Promise<{ elapsed: number; reached: boolean; reloaded: boolean }> {
+export async function loginCms(page: Page, account: CmsAccount): Promise<LoginResult> {
   await page.goto(account.baseUrl, { waitUntil: 'domcontentloaded' });
   await fillLoginForm(page, account);
 
@@ -84,18 +88,17 @@ export function loginVerdict(reached: boolean, elapsed: number, reloaded: boolea
  * Menu chính = mục sidebar đang hiện (cao ≥ 40px), bỏ mục `hidden`.
  * Mục chỉ mở nhóm con thì lấy URL trang con đầu tiên trong cùng `<li>`.
  */
-export async function listMainMenus(page: Page, baseUrl: string): Promise<MainMenu[]> {
-  const origin = originOf(baseUrl);
-  await page.locator('a:visible').filter({ hasText: 'Quản lý tài khoản' }).first().waitFor({ state: 'visible', timeout: 15_000 });
-  const raw = await page.evaluate(() => {
-    const links = [...document.querySelectorAll('a')].filter((a) => {
-      const cls = String(a.className || '');
-      if (!cls.includes('pl-5') || cls.includes('hidden')) return false;
+async function readSidebar(page: Page): Promise<{ name: string; href: string }[]> {
+  return page.evaluate(() => {
+    const all = [...document.querySelectorAll('a')].filter((a) => {
+      const tokens = String(a.className || '').split(/\s+/);
+      return tokens.includes('pl-5') && !tokens.includes('hidden');
+    });
+    const laidOut = all.filter((a) => {
       const box = a.getBoundingClientRect();
       return box.height >= 40 && box.width >= 80;
     });
-
-    return links.map((a) => {
+    return laidOut.map((a) => {
       const own = a.getAttribute('href');
       let href = own && own !== '#' && !own.startsWith('javascript:') ? own : '';
       if (!href) {
@@ -114,6 +117,21 @@ export async function listMainMenus(page: Page, baseUrl: string): Promise<MainMe
       };
     });
   });
+}
+
+export async function listMainMenus(page: Page, baseUrl: string): Promise<MainMenu[]> {
+  const origin = originOf(baseUrl);
+  let raw: { name: string; href: string }[] = [];
+  const deadline = Date.now() + 12_000;
+  while (Date.now() < deadline) {
+    raw = await readSidebar(page).catch(() => []);
+    const named = raw.filter((item) => item.name);
+    if (named.length >= 3) {
+      raw = named;
+      break;
+    }
+    await page.waitForTimeout(300);
+  }
 
   const seen = new Set<string>();
   const menus: MainMenu[] = [];
@@ -128,29 +146,48 @@ export async function listMainMenus(page: Page, baseUrl: string): Promise<MainMe
   return menus;
 }
 
-export async function checkMenuPage(page: Page, url: string): Promise<{ ok: boolean; status: number; note: string }> {
-  const response = await page.goto(url, { waitUntil: 'domcontentloaded' });
-  const status = response?.status() ?? 0;
-  await page.waitForTimeout(500);
-
+/** Nội dung đang mở, không điều hướng lại. Dùng cho SPA (Strapi) để khỏi mất phiên khi reload. */
+export async function assessVisibleContent(
+  page: Page,
+  status = 200,
+): Promise<{ ok: boolean; status: number; note: string }> {
   if (page.url().includes('/login')) {
     return { ok: false, status, note: 'bị đẩy về đăng nhập' };
-  }
-  if (status !== 200 && status !== 304) {
-    return { ok: false, status, note: `HTTP ${status || 'không có'}` };
   }
 
   let mainText = '';
   for (let attempt = 0; attempt < 4; attempt++) {
     mainText = await page.evaluate(() => {
-      let best = '';
+      const texts: string[] = [];
+      const main = document.querySelector('main');
+      if (main) {
+        const box = main.getBoundingClientRect();
+        if (box.width >= 400 && box.height >= 120) {
+          texts.push((main.innerText || '').replace(/\s+/g, ' ').trim());
+        }
+      }
       for (const node of document.querySelectorAll('div')) {
         const box = node.getBoundingClientRect();
         if (box.x < 240 || box.width < 400 || box.height < 160) continue;
         const text = (node.innerText || '').replace(/\s+/g, ' ').trim();
-        if (text.length > best.length && text.length < 8000) best = text;
+        if (text.length < 8000) texts.push(text);
       }
-      return best;
+      const bits: string[] = [];
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let current = walker.nextNode();
+      while (current) {
+        const parent = current.parentElement;
+        if (parent) {
+          const box = parent.getBoundingClientRect();
+          if (box.x >= 240 && box.width >= 8 && box.height >= 8) {
+            const bit = (current.textContent || '').replace(/\s+/g, ' ').trim();
+            if (bit) bits.push(bit);
+          }
+        }
+        current = walker.nextNode();
+      }
+      if (bits.length) texts.push(bits.join(' ').slice(0, 7900));
+      return texts.reduce((best, text) => (text.length > best.length ? text : best), '');
     });
     if (mainText.length >= 40) break;
     await page.waitForTimeout(700);
@@ -165,6 +202,29 @@ export async function checkMenuPage(page: Page, url: string): Promise<{ ok: bool
   return { ok: true, status, note: '' };
 }
 
+export async function checkMenuPage(page: Page, url: string): Promise<{ ok: boolean; status: number; note: string }> {
+  const response = await page.goto(url, { waitUntil: 'domcontentloaded' });
+  const status = response?.status() ?? 0;
+  await page.waitForTimeout(500);
+  if (status !== 200 && status !== 304 && !page.url().includes('/login')) {
+    return { ok: false, status, note: `HTTP ${status || 'không có'}` };
+  }
+  return assessVisibleContent(page, status);
+}
+
+export async function visitMenus(page: Page, menus: MainMenu[]): Promise<MenuCheck[]> {
+  const results: MenuCheck[] = [];
+  for (const menu of menus) {
+    if (!menu.url) {
+      results.push({ name: menu.name, ok: false, status: 0, note: 'không có trang để mở' });
+      continue;
+    }
+    const checked = await checkMenuPage(page, menu.url);
+    results.push({ name: menu.name, ok: checked.ok, status: checked.status, note: checked.note });
+  }
+  return results;
+}
+
 export async function checkMainMenus(page: Page, baseUrl: string): Promise<MenuCheck[]> {
   let menus: MainMenu[] = [];
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -177,21 +237,7 @@ export async function checkMainMenus(page: Page, baseUrl: string): Promise<MenuC
       await page.waitForLoadState('domcontentloaded');
     }
   }
-  if (menus.length < 3) {
-    await page.locator('a:visible').filter({ hasText: 'Quản lý tài khoản' }).first().hover().catch(() => undefined);
-    menus = await listMainMenus(page, baseUrl);
-  }
-
-  const results: MenuCheck[] = [];
-  for (const menu of menus) {
-    if (!menu.url) {
-      results.push({ name: menu.name, ok: false, status: 0, note: 'không có trang để mở' });
-      continue;
-    }
-    const checked = await checkMenuPage(page, menu.url);
-    results.push({ name: menu.name, ok: checked.ok, status: checked.status, note: checked.note });
-  }
-  return results;
+  return visitMenus(page, menus);
 }
 
 /** Bấm avatar góc trên → Đăng xuất. Đồng hồ bắt đầu lúc bấm mục Đăng xuất. */

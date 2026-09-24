@@ -38,6 +38,22 @@ export const env = {
   qtBaseUrl: process.env.QT_BASE_URL || 'https://quantri.trangnguyen.edu.vn',
   qtUser: process.env.QT_USER || '',
   qtPass: process.env.QT_PASS || '',
+  cms5BaseUrl: process.env.CMS5_BASE_URL || 'https://admin.infra.trangnguyen.edu.vn/',
+  cms5User: process.env.CMS5_USER || '',
+  cms5Pass: process.env.CMS5_PASS || '',
+  /** URL theo bảng tài khoản (admin.tnmath.edu.vn), không dùng header pre-uat trên sheet. */
+  cms6BaseUrl: process.env.CMS6_BASE_URL || 'https://admin.tnmath.edu.vn/',
+  cms6User: process.env.CMS6_USER || '',
+  cms6Pass: process.env.CMS6_PASS || '',
+  noiboBaseUrl: process.env.NOIBO_BASE_URL || 'https://noibo.trangnguyen.edu.vn/login',
+  noiboUser: process.env.NOIBO_USER || '',
+  noiboPass: process.env.NOIBO_PASS || '',
+  cmsNewBaseUrl: process.env.CMSNEW_BASE_URL || 'https://cms-news.trangnguyen.edu.vn/admin/login',
+  cmsNewUser: process.env.CMSNEW_USER || '',
+  cmsNewPass: process.env.CMSNEW_PASS || '',
+  admVnmfBaseUrl: process.env.ADMVNMF_BASE_URL || 'https://vnmf.edu.vn/admin',
+  admVnmfUser: process.env.ADMVNMF_USER || '',
+  admVnmfPass: process.env.ADMVNMF_PASS || '',
 };
 
 export function lessonUrl(): string {
