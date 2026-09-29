@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { env } from '../config';
-import { dismissPopups, ensureLoggedIn, loginAsStudent, loginTrigger } from './auth';
+import { dismissPopups, ensureLoggedIn, loginAsStudent, loginTrigger, logout } from './auth';
 import { probeCurrentPageStatus } from './result';
 
 /**
@@ -101,67 +101,72 @@ async function ensureHostLoggedIn(page: Page, baseUrl: string): Promise<void> {
   if (loginVisible || !sbdVisible) await loginAsStudent(page, undefined, baseUrl);
 }
 
-/** Form Keycloak của client V5. Điền xong thì phiên V5 được tạo. */
-async function loginV5OnKeycloakIfShown(page: Page): Promise<boolean> {
-  const userField = page
-    .getByRole('textbox', { name: /tên đăng nhập/i })
-    .or(page.locator('input[name="username"]'))
-    .first();
-  const shown = await userField.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
-  if (!shown) return false;
-  await userField.fill(env.studentUser);
-  await page.locator('input[type="password"]').first().fill(env.studentPass);
-  await page.getByRole('button', { name: /^đăng nhập$/i }).last().click();
-  await page.waitForURL((url) => url.host !== 'id.trangnguyen.edu.vn', { timeout: 25000 }).catch(() => {});
-  return true;
-}
-
 /**
- * V6 -> V5 (HC-V6-07): tiền điều kiện là đã đăng nhập cả V6 và V5, rồi menu "Thi Toán"
- * -> tab kỳ thi -> "Thi ngay" của chặng "Đang diễn ra". Thiếu phiên V5 thì đích rơi vào
- * form Keycloak (client v5-frontend) thay vì màn Thi hay.
+ * V6 -> V5 (HC-V6-07): Đăng nhập V5 → click sang màn V6 → rồi Thi Toán →
+ * tab "Thi VNMF (Lớp 1 - 2 - 3)" → "Thi ngay" chặng "Đang diễn ra".
+ * Luôn làm mới phiên V5 trước khi click sang V6 (token cũ có thể không đủ cho Thi ngay).
+ * Không điền Keycloak giữa đường — mất phiên = FAIL theo sheet.
  */
 export async function switchV6ToV5ViaThiNgay(page: Page): Promise<SwitchResult & { sessionKept: boolean }> {
-  await ensureHostLoggedIn(page, env.baseUrl);
-  await ensureHostLoggedIn(page, env.v5BaseUrl);
-  await ensureHostLoggedIn(page, env.baseUrl);
+  // 1) Đăng nhập V5 mới (nếu đang login thì đăng xuất rồi login lại)
+  await page.goto(env.v5BaseUrl, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+  await dismissPopups(page);
+  if (await page.getByText(/SBD:/i).first().isVisible().catch(() => false)) {
+    await logout(page).catch(() => undefined);
+    await dismissPopups(page);
+  }
+  await loginAsStudent(page, undefined, env.v5BaseUrl);
 
-  await page.goto(`${env.baseUrl}/thi-toan`, { waitUntil: 'domcontentloaded' });
+  // 2) Click sang màn V6
+  await page.getByRole('link', { name: /^VNMF$/i }).first().click();
+  await page.waitForURL(urlOnHost(env.baseUrl), { timeout: 20_000 });
+  await page.waitForTimeout(1000);
+  await dismissPopups(page);
+  await ensureLoggedIn(page);
+
+  // 3) Các bước sheet trên V6
+  const menu = page
+    .getByRole('link', { name: /^Thi Toán$/i })
+    .or(page.getByRole('menuitem', { name: /^Thi Toán$/i }))
+    .first();
+  await menu.click();
+  await page.waitForURL(/\/thi-toan/i, { timeout: 20_000 });
   await page.waitForTimeout(2000);
   await dismissPopups(page);
   await ensureLoggedIn(page);
 
-  const tab = page.getByRole('tab', { name: /thi vnmf/i }).or(page.getByText(/thi vnmf/i)).first();
-  if (await tab.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false)) {
-    await tab.click();
-    await page.waitForTimeout(1500);
-  }
-
-  const activeRow = page.locator('tr, .round-row').filter({ hasText: /đang diễn ra/i }).first();
-  await activeRow.scrollIntoViewIfNeeded().catch(() => {});
-  const examNowBtn = (await activeRow.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false))
-    ? activeRow.getByRole('link', { name: /^Thi ngay$/i }).first()
-    : page.getByRole('link', { name: /^Thi ngay$/i }).first();
-
-  await examNowBtn.click();
-  const loggedInOnTheWay = await loginV5OnKeycloakIfShown(page);
-  const onExam = /thi\.trangnguyen\.edu\.vn|vao-thi-trang-nguyen-2023/i.test(page.url());
-  // Form đăng nhập là client V5. Đăng nhập xong mà chưa tới màn Thi hay thì bấm Thi ngay lại.
-  if (loggedInOnTheWay && !onExam) {
-    await ensureHostLoggedIn(page, env.v5BaseUrl);
-    await ensureHostLoggedIn(page, env.baseUrl);
-    await page.goto(`${env.baseUrl}/thi-toan`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-    await dismissPopups(page);
-    await ensureLoggedIn(page);
-    const again = page.getByRole('link', { name: /^Thi ngay$/i }).first();
-    await again.click();
-    await loginV5OnKeycloakIfShown(page);
-  }
-
-  await page.waitForURL(urlOnHost(env.v5BaseUrl), { timeout: 25000 }).catch(() => {});
+  const tab = page
+    .getByRole('tab', { name: /Thi VNMF \(Lớp 1 - 2 - 3\)/i })
+    .or(page.getByText(/Thi VNMF \(Lớp 1 - 2 - 3\)/i))
+    .first();
+  await tab.waitFor({ state: 'visible', timeout: 10_000 });
+  await tab.click();
   await page.waitForTimeout(1500);
 
-  const sessionKept = await page.getByText(/SBD:/i).first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true).catch(() => false);
+  const activeRow = page.locator('tr, .round-row').filter({ hasText: /đang diễn ra/i }).first();
+  await activeRow.scrollIntoViewIfNeeded();
+  await activeRow.waitFor({ state: 'visible', timeout: 10_000 });
+  await activeRow.getByRole('link', { name: /^Thi ngay$/i }).first().click();
+
+  await page
+    .waitForURL(
+      (url) => url.host === 'thi.trangnguyen.edu.vn' || /vao-thi-trang-nguyen-2023/i.test(url.pathname),
+      { timeout: 25_000 },
+    )
+    .catch(() => {});
+  await page.waitForTimeout(1500);
+
+  const onLogin =
+    page.url().includes('id.trangnguyen.edu.vn') ||
+    (await page.locator('input[name="username"]').first().isVisible().catch(() => false));
+  const sessionKept =
+    !onLogin &&
+    (await page
+      .getByText(/SBD:/i)
+      .first()
+      .waitFor({ state: 'visible', timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false));
   return { ...toSwitchResult(page, await probeCurrentPageStatus(page)), sessionKept };
 }

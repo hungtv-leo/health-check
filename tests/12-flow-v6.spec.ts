@@ -111,7 +111,7 @@ test.describe('Luồng liên tục · B. WEB V6', { tag: ['@critical', '@HC-V6']
     await attachResult(testInfo, verdict, { hien_cau_hoi: hienCauHoi ? 'có' : 'không' });
   });
 
-  test('HC-V6-07 · Chuyển hệ V6 → V5 (Thi ngay)', async ({ sharedPage: page }, testInfo) => {
+  test('HC-V6-07 · Luồng chuyển V6 → V5 (vào màn Thi hay)', async ({ sharedPage: page }, testInfo) => {
     const { host, path, status, sessionKept } = await switchV6ToV5ViaThiNgay(page);
     const onThiHay = host === 'thi.trangnguyen.edu.vn' || /vao-thi-trang-nguyen-2023/i.test(path);
     const verdict: Verdict = onThiHay && status === 200 && sessionKept ? 'PASS' : 'FAIL';

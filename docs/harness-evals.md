@@ -28,16 +28,19 @@ Sau mỗi lần sửa harness (AGENTS.md / rules / skills) hoặc mỗi tháng, 
 
 Runner: `scripts/run-checks.ps1` (chạy lần lượt `npm test` rồi `npm run test:cms`, ghi log vào `logs/`, mỗi suite một summary Discord).
 
-**Task `Auto-check` chạy mỗi ngày 16:30** (không còn 08:00):
+**Task `Auto-check` chạy mỗi ngày 08:00 và 16:00**:
 
 ```powershell
 $RepoPath = "C:\TrangNguyen\Leonardo\Working\auto-check"
 $Action   = New-ScheduledTaskAction -Execute "powershell.exe" `
     -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$RepoPath\scripts\run-checks.ps1`"" `
     -WorkingDirectory $RepoPath
-$Trigger  = New-ScheduledTaskTrigger -Daily -At 4:30pm
+$TriggerMorning   = New-ScheduledTaskTrigger -Daily -At 8:00am
+$TriggerAfternoon = New-ScheduledTaskTrigger -Daily -At 4:00pm
 $Settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable
-Register-ScheduledTask -TaskName "Auto-check" -Action $Action -Trigger $Trigger -Settings $Settings -Description "Auto Check Web Học Thi + Web Quản Trị, 16:30"
+Register-ScheduledTask -TaskName "Auto-check" -Action $Action `
+    -Trigger @($TriggerMorning, $TriggerAfternoon) -Settings $Settings `
+    -Description "Auto Check Web Học Thi + Web Quản Trị, 08:00 và 16:00" -Force
 ```
 
 - Chạy thử ngay: `Start-ScheduledTask -TaskName "Auto-check"`
